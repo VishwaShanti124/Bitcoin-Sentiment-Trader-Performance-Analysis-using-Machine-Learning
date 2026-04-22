@@ -1,0 +1,1097 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Primetrade.ai — Sentiment Analysis Dashboard</title>
+
+<!-- Fonts -->
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&family=DM+Sans:wght@300;400;500&display=swap" rel="stylesheet"/>
+
+<!-- Chart.js -->
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3.0.1/dist/chartjs-plugin-annotation.min.js"></script>
+
+<style>
+/* ══════════════════════════════════════════════════════
+   DESIGN TOKENS
+══════════════════════════════════════════════════════ */
+:root {
+  --bg:       #080b12;
+  --surface:  #0e1219;
+  --card:     #121720;
+  --border:   #1c2230;
+  --orange:   #f7931a;
+  --teal:     #00d4aa;
+  --purple:   #c084fc;
+  --blue:     #38bdf8;
+  --red:      #f87171;
+  --green:    #4ade80;
+  --yellow:   #facc15;
+  --text:     #e2e8f0;
+  --muted:    #64748b;
+  --faint:    #1e2535;
+  --radius:   10px;
+  --glow-o:   0 0 20px rgba(247,147,26,.18);
+  --glow-t:   0 0 20px rgba(0,212,170,.12);
+}
+
+/* ── Reset / Base ────────────────────────────────── */
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:'DM Sans',sans-serif;
+     font-size:14px;line-height:1.6;min-height:100vh;overflow-x:hidden}
+
+/* ── Noise overlay ───────────────────────────────── */
+body::before{content:'';position:fixed;inset:0;
+  background-image:url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='4'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)' opacity='.03'/%3E%3C/svg%3E");
+  pointer-events:none;z-index:0;opacity:.4}
+
+/* ── Scrollbar ───────────────────────────────────── */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:var(--surface)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:99px}
+
+/* ══════════════════════════════════════════════════════
+   HEADER
+══════════════════════════════════════════════════════ */
+header{
+  position:sticky;top:0;z-index:100;
+  background:rgba(8,11,18,.85);backdrop-filter:blur(20px);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;justify-content:space-between;
+  padding:0 2rem;height:60px;
+}
+.logo{
+  font-family:'Syne',sans-serif;font-weight:800;font-size:1.1rem;
+  color:var(--orange);letter-spacing:-.02em;
+  display:flex;align-items:center;gap:.5rem;
+}
+.logo span{color:var(--text);font-weight:400}
+.header-right{display:flex;align-items:center;gap:1rem}
+.badge{
+  font-family:'DM Mono',monospace;font-size:.7rem;padding:.25rem .65rem;
+  background:var(--faint);border:1px solid var(--border);border-radius:99px;
+  color:var(--muted);
+}
+.badge.live{border-color:var(--green);color:var(--green)}
+.badge.live::before{content:'● ';animation:pulse 1.5s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+
+#refresh-btn{
+  background:transparent;border:1px solid var(--border);color:var(--muted);
+  padding:.3rem .9rem;border-radius:6px;cursor:pointer;font-size:.78rem;
+  font-family:'DM Sans',sans-serif;transition:.2s;
+}
+#refresh-btn:hover{border-color:var(--orange);color:var(--orange)}
+
+/* ══════════════════════════════════════════════════════
+   NAV TABS
+══════════════════════════════════════════════════════ */
+.nav-tabs{
+  display:flex;gap:.25rem;padding:.75rem 2rem;
+  border-bottom:1px solid var(--border);
+  background:var(--surface);overflow-x:auto;
+}
+.nav-tab{
+  padding:.45rem 1.1rem;border-radius:6px;cursor:pointer;
+  font-size:.82rem;font-family:'DM Sans',sans-serif;font-weight:500;
+  color:var(--muted);border:1px solid transparent;
+  white-space:nowrap;transition:.2s;
+}
+.nav-tab:hover{color:var(--text);background:var(--faint)}
+.nav-tab.active{
+  color:var(--orange);background:rgba(247,147,26,.08);
+  border-color:rgba(247,147,26,.25);
+}
+
+/* ══════════════════════════════════════════════════════
+   LAYOUT
+══════════════════════════════════════════════════════ */
+main{max-width:1440px;margin:0 auto;padding:1.5rem 2rem 3rem;position:relative;z-index:1}
+
+.section{display:none}
+.section.active{display:block;animation:fadeIn .3s ease}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+.section-title{
+  font-family:'Syne',sans-serif;font-size:1.35rem;font-weight:700;
+  color:var(--text);margin-bottom:1.25rem;display:flex;align-items:center;gap:.6rem;
+}
+.section-title .accent{color:var(--orange)}
+
+/* ══════════════════════════════════════════════════════
+   KPI CARDS
+══════════════════════════════════════════════════════ */
+.kpi-grid{
+  display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));
+  gap:1rem;margin-bottom:2rem;
+}
+.kpi-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:1.1rem 1.25rem;
+  position:relative;overflow:hidden;transition:.25s;
+}
+.kpi-card::after{
+  content:'';position:absolute;inset:0;
+  background:linear-gradient(135deg,rgba(247,147,26,.04) 0%,transparent 60%);
+}
+.kpi-card:hover{border-color:rgba(247,147,26,.3);box-shadow:var(--glow-o);transform:translateY(-2px)}
+.kpi-label{font-size:.72rem;color:var(--muted);text-transform:uppercase;
+           letter-spacing:.08em;font-family:'DM Mono',monospace;margin-bottom:.4rem}
+.kpi-value{
+  font-family:'Syne',sans-serif;font-size:1.8rem;font-weight:800;
+  color:var(--orange);line-height:1;
+}
+.kpi-value.teal{color:var(--teal)}
+.kpi-value.blue{color:var(--blue)}
+.kpi-value.green{color:var(--green)}
+.kpi-sub{font-size:.72rem;color:var(--muted);margin-top:.3rem}
+
+/* ══════════════════════════════════════════════════════
+   CARDS / GRID
+══════════════════════════════════════════════════════ */
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
+.grid-3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:1.25rem;margin-bottom:1.25rem}
+.grid-1{display:grid;grid-template-columns:1fr;gap:1.25rem;margin-bottom:1.25rem}
+@media(max-width:900px){.grid-2,.grid-3{grid-template-columns:1fr}}
+
+.card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:var(--radius);padding:1.25rem;
+}
+.card-title{
+  font-family:'Syne',sans-serif;font-size:.88rem;font-weight:700;
+  color:var(--muted);text-transform:uppercase;letter-spacing:.06em;
+  margin-bottom:1rem;display:flex;align-items:center;gap:.5rem;
+}
+.card-title .dot{width:6px;height:6px;border-radius:50%;background:var(--orange)}
+.card-title .dot.teal{background:var(--teal)}
+.card-title .dot.blue{background:var(--blue)}
+.card-title .dot.purple{background:var(--purple)}
+
+canvas{width:100%!important}
+
+/* ══════════════════════════════════════════════════════
+   SENTIMENT PILLS
+══════════════════════════════════════════════════════ */
+.sent-grid{display:flex;gap:.75rem;flex-wrap:wrap;margin-bottom:1.5rem}
+.sent-pill{
+  flex:1;min-width:140px;
+  background:var(--card);border:1px solid var(--border);
+  border-radius:8px;padding:.85rem 1rem;text-align:center;
+  transition:.2s;cursor:default;
+}
+.sent-pill:hover{transform:translateY(-2px)}
+.sent-pill .sp-name{font-size:.7rem;text-transform:uppercase;letter-spacing:.1em;
+                    color:var(--muted);margin-bottom:.3rem}
+.sent-pill .sp-pnl{font-family:'Syne',sans-serif;font-size:1.4rem;font-weight:800}
+.sent-pill .sp-wr{font-size:.75rem;color:var(--muted);margin-top:.2rem}
+.sent-pill.ef{border-color:rgba(248,113,113,.3);box-shadow:0 0 15px rgba(248,113,113,.06)}
+.sent-pill.ef .sp-pnl{color:#f87171}
+.sent-pill.fe{border-color:rgba(251,146,60,.3)}
+.sent-pill.fe .sp-pnl{color:#fb923c}
+.sent-pill.ne{border-color:rgba(250,204,21,.3)}
+.sent-pill.ne .sp-pnl{color:#facc15}
+.sent-pill.gr{border-color:rgba(74,222,128,.3)}
+.sent-pill.gr .sp-pnl{color:#4ade80}
+.sent-pill.eg{border-color:rgba(52,211,153,.3)}
+.sent-pill.eg .sp-pnl{color:#34d399}
+
+/* ══════════════════════════════════════════════════════
+   STAT TEST BOXES
+══════════════════════════════════════════════════════ */
+.stat-boxes{display:grid;grid-template-columns:1fr 1fr;gap:1rem;margin-bottom:1.5rem}
+.stat-box{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:8px;padding:1.1rem 1.25rem;
+}
+.stat-box .test-name{font-size:.7rem;color:var(--muted);text-transform:uppercase;
+                      letter-spacing:.08em;margin-bottom:.6rem}
+.stat-box .test-vals{display:flex;gap:1.5rem;margin-bottom:.5rem}
+.stat-box .tv-item{}
+.stat-box .tv-label{font-size:.65rem;color:var(--muted);margin-bottom:.1rem}
+.stat-box .tv-val{font-family:'DM Mono',monospace;font-size:1.05rem;
+                   font-weight:500;color:var(--teal)}
+.stat-box .test-verdict{
+  font-size:.78rem;padding:.35rem .7rem;border-radius:5px;
+  background:rgba(100,116,139,.12);color:var(--muted);
+}
+.stat-box .test-verdict.sig{background:rgba(74,222,128,.1);color:var(--green)}
+
+/* ══════════════════════════════════════════════════════
+   FEATURE IMPORTANCE BAR
+══════════════════════════════════════════════════════ */
+.fi-list{display:flex;flex-direction:column;gap:.7rem}
+.fi-row{display:flex;align-items:center;gap:.75rem}
+.fi-label{width:130px;font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted);flex-shrink:0}
+.fi-bar-wrap{flex:1;background:var(--faint);border-radius:99px;height:8px;overflow:hidden}
+.fi-bar{height:100%;border-radius:99px;transition:width .8s cubic-bezier(.4,0,.2,1)}
+.fi-pct{font-family:'DM Mono',monospace;font-size:.78rem;color:var(--text);
+        width:42px;text-align:right;flex-shrink:0}
+
+/* ══════════════════════════════════════════════════════
+   LEADERBOARD TABLE
+══════════════════════════════════════════════════════ */
+.lb-wrap{overflow-x:auto}
+table.lb{width:100%;border-collapse:collapse;font-size:.82rem}
+table.lb th{
+  text-align:left;padding:.6rem .9rem;
+  font-size:.68rem;text-transform:uppercase;letter-spacing:.08em;
+  color:var(--muted);border-bottom:1px solid var(--border);
+  font-family:'DM Mono',monospace;
+}
+table.lb td{
+  padding:.55rem .9rem;border-bottom:1px solid rgba(28,34,48,.6);
+  transition:.15s;
+}
+table.lb tr:hover td{background:rgba(247,147,26,.04)}
+table.lb .rank{font-family:'DM Mono',monospace;color:var(--muted);text-align:center}
+table.lb .rank.top3{color:var(--orange);font-weight:700}
+table.lb .addr{font-family:'DM Mono',monospace;color:var(--blue)}
+.pnl-pos{color:var(--green);font-weight:600}
+.pnl-neg{color:var(--red);font-weight:600}
+
+/* ══════════════════════════════════════════════════════
+   HEATMAP
+══════════════════════════════════════════════════════ */
+.heatmap-wrap{overflow-x:auto}
+.heatmap{display:grid;gap:2px;font-family:'DM Mono',monospace;font-size:.65rem}
+.hm-cell{
+  padding:.3rem .15rem;text-align:center;border-radius:3px;
+  transition:.2s;cursor:default;
+}
+.hm-cell:hover{filter:brightness(1.3);z-index:1}
+
+/* ══════════════════════════════════════════════════════
+   LOADING
+══════════════════════════════════════════════════════ */
+#loader{
+  position:fixed;inset:0;background:var(--bg);
+  display:flex;flex-direction:column;align-items:center;justify-content:center;
+  z-index:9999;transition:opacity .4s;
+}
+#loader.hidden{opacity:0;pointer-events:none}
+.loader-ring{
+  width:48px;height:48px;border-radius:50%;
+  border:3px solid var(--border);border-top-color:var(--orange);
+  animation:spin 1s linear infinite;margin-bottom:1rem;
+}
+@keyframes spin{to{transform:rotate(360deg)}}
+.loader-text{font-family:'DM Mono',monospace;font-size:.8rem;color:var(--muted)}
+
+/* ══════════════════════════════════════════════════════
+   INSIGHT BOX
+══════════════════════════════════════════════════════ */
+.insight{
+  background:rgba(247,147,26,.07);border:1px solid rgba(247,147,26,.2);
+  border-left:3px solid var(--orange);border-radius:8px;
+  padding:.85rem 1.1rem;font-size:.84rem;color:var(--text);
+  margin-bottom:1.25rem;line-height:1.65;
+}
+.insight strong{color:var(--orange)}
+
+/* ══════════════════════════════════════════════════════
+   RESPONSIVE
+══════════════════════════════════════════════════════ */
+@media(max-width:640px){
+  main{padding:1rem;} .sent-grid{flex-direction:column}
+  .stat-boxes{grid-template-columns:1fr}
+  .kpi-grid{grid-template-columns:repeat(2,1fr)}
+}
+</style>
+</head>
+<body>
+
+<!-- ════ LOADER ════ -->
+<div id="loader">
+  <div class="loader-ring"></div>
+  <div class="loader-text">Loading analytics…</div>
+</div>
+
+<!-- ════ HEADER ════ -->
+<header>
+  <div class="logo">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+      <path d="M3 17L9 11L13 15L21 7" stroke="#f7931a" stroke-width="2.2"
+            stroke-linecap="round" stroke-linejoin="round"/>
+      <circle cx="21" cy="7" r="2" fill="#f7931a"/>
+    </svg>
+    Primetrade<span>.ai</span>
+  </div>
+  <div class="header-right">
+    <span class="badge live">Live Dashboard</span>
+    <span class="badge" id="cache-badge">Warming…</span>
+    <button id="refresh-btn" onclick="refreshData()">↻ Refresh</button>
+  </div>
+</header>
+
+<!-- ════ NAV TABS ════ -->
+<nav class="nav-tabs">
+  <div class="nav-tab active" onclick="showTab('overview')">Overview</div>
+  <div class="nav-tab" onclick="showTab('sentiment')">Sentiment Analysis</div>
+  <div class="nav-tab" onclick="showTab('performance')">Trader Performance</div>
+  <div class="nav-tab" onclick="showTab('stats')">Statistical Tests</div>
+  <div class="nav-tab" onclick="showTab('ml')">ML Insights</div>
+  <div class="nav-tab" onclick="showTab('temporal')">Temporal Patterns</div>
+  <div class="nav-tab" onclick="showTab('leaderboard')">Leaderboard</div>
+</nav>
+
+<!-- ════ MAIN ════ -->
+<main>
+
+  <!-- ── OVERVIEW ──────────────────────────────────────── -->
+  <section class="section active" id="sec-overview">
+    <h2 class="section-title">
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+        <rect x="3" y="3" width="7" height="7" rx="1.5" fill="var(--orange)" opacity=".8"/>
+        <rect x="14" y="3" width="7" height="7" rx="1.5" fill="var(--teal)" opacity=".8"/>
+        <rect x="3" y="14" width="7" height="7" rx="1.5" fill="var(--blue)" opacity=".8"/>
+        <rect x="14" y="14" width="7" height="7" rx="1.5" fill="var(--purple)" opacity=".8"/>
+      </svg>
+      Dashboard <span class="accent">Overview</span>
+    </h2>
+
+    <div class="kpi-grid" id="kpi-grid"></div>
+
+    <div class="insight" id="overview-insight">
+      Loading key insight…
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title"><span class="dot"></span>Fear/Greed Index — 30-day Rolling Average</div>
+        <canvas id="chart-fg" height="200"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="dot teal"></span>Sentiment Distribution</div>
+        <canvas id="chart-sent-pie" height="200"></canvas>
+      </div>
+    </div>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title"><span class="dot blue"></span>Win Rate by Sentiment</div>
+        <canvas id="chart-winrate" height="180"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="dot purple"></span>Leverage Bucket Win Rate</div>
+        <canvas id="chart-lev" height="180"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── SENTIMENT ANALYSIS ─────────────────────────────── -->
+  <section class="section" id="sec-sentiment">
+    <h2 class="section-title">Sentiment <span class="accent">Analysis</span></h2>
+
+    <div class="sent-grid" id="sent-pills"></div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title"><span class="dot"></span>Mean PnL by Sentiment Regime</div>
+        <canvas id="chart-sent-pnl" height="220"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="dot teal"></span>Trade Volume per Sentiment</div>
+        <canvas id="chart-sent-vol" height="220"></canvas>
+      </div>
+    </div>
+    <div class="grid-1">
+      <div class="card">
+        <div class="card-title"><span class="dot blue"></span>Symbol × Sentiment Mean PnL</div>
+        <canvas id="chart-sym-sent" height="200"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── TRADER PERFORMANCE ────────────────────────────── -->
+  <section class="section" id="sec-performance">
+    <h2 class="section-title">Trader <span class="accent">Performance</span></h2>
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title"><span class="dot"></span>Day-of-Week Mean PnL</div>
+        <canvas id="chart-dow" height="220"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="dot teal"></span>Avg Leverage per Sentiment</div>
+        <canvas id="chart-sent-lev" height="220"></canvas>
+      </div>
+    </div>
+    <div class="grid-1">
+      <div class="card">
+        <div class="card-title"><span class="dot blue"></span>Hour × Sentiment Heatmap (Mean PnL)</div>
+        <div class="heatmap-wrap"><div id="heatmap-container"></div></div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── STATISTICAL TESTS ─────────────────────────────── -->
+  <section class="section" id="sec-stats">
+    <h2 class="section-title">Statistical <span class="accent">Tests</span></h2>
+
+    <div class="stat-boxes" id="stat-boxes"></div>
+
+    <div class="insight" id="stats-insight"></div>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title"><span class="dot"></span>PnL Distribution — Extreme Fear vs Extreme Greed</div>
+        <canvas id="chart-hist" height="230"></canvas>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="dot teal"></span>Fear/Greed Index Distribution</div>
+        <canvas id="chart-fg-hist" height="230"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── ML INSIGHTS ───────────────────────────────────── -->
+  <section class="section" id="sec-ml">
+    <h2 class="section-title">Machine Learning <span class="accent">Insights</span></h2>
+
+    <div class="grid-2">
+      <div class="card">
+        <div class="card-title"><span class="dot"></span>Random Forest Feature Importance</div>
+        <div class="fi-list" id="fi-list"></div>
+        <div style="margin-top:1rem;padding:.6rem .9rem;background:var(--faint);
+                    border-radius:6px;font-family:'DM Mono',monospace;font-size:.78rem;color:var(--muted)">
+          5-fold CV ROC-AUC: <span id="cv-auc" style="color:var(--teal)">…</span>
+        </div>
+      </div>
+      <div class="card">
+        <div class="card-title"><span class="dot teal"></span>Feature Importance (Radial)</div>
+        <canvas id="chart-radar" height="260"></canvas>
+      </div>
+    </div>
+
+    <div class="insight" id="ml-insight"></div>
+  </section>
+
+  <!-- ── TEMPORAL PATTERNS ─────────────────────────────── -->
+  <section class="section" id="sec-temporal">
+    <h2 class="section-title">Temporal <span class="accent">Patterns</span></h2>
+    <div class="grid-1">
+      <div class="card">
+        <div class="card-title"><span class="dot"></span>Fear/Greed Index Over Time</div>
+        <canvas id="chart-ts" height="200"></canvas>
+      </div>
+    </div>
+    <div class="grid-1">
+      <div class="card">
+        <div class="card-title"><span class="dot teal"></span>Daily Trade Count by Sentiment</div>
+        <canvas id="chart-daily-vol" height="180"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ── LEADERBOARD ───────────────────────────────────── -->
+  <section class="section" id="sec-leaderboard">
+    <h2 class="section-title">Trader <span class="accent">Leaderboard</span></h2>
+    <div class="card">
+      <div class="card-title"><span class="dot"></span>Top 20 Traders by Total PnL</div>
+      <div class="lb-wrap">
+        <table class="lb">
+          <thead>
+            <tr>
+              <th>Rank</th><th>Address</th><th>Total PnL</th>
+              <th>Win Rate</th><th>Trades</th><th>Avg Lev</th><th>Symbols</th>
+            </tr>
+          </thead>
+          <tbody id="lb-body"></tbody>
+        </table>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+/* ══════════════════════════════════════════════════════
+   GLOBAL STATE
+══════════════════════════════════════════════════════ */
+let DATA = {};
+const SENT_ORDER = ["Extreme Fear","Fear","Neutral","Greed","Extreme Greed"];
+const SENT_COLORS = {
+  "Extreme Fear":"#f87171","Fear":"#fb923c","Neutral":"#facc15",
+  "Greed":"#4ade80","Extreme Greed":"#34d399"
+};
+const CHARTS = {};
+
+Chart.defaults.color = '#64748b';
+Chart.defaults.font.family = "'DM Mono', monospace";
+Chart.defaults.font.size = 11;
+
+/* ══════════════════════════════════════════════════════
+   TABS
+══════════════════════════════════════════════════════ */
+function showTab(id) {
+  document.querySelectorAll('.section').forEach(s => s.classList.remove('active'));
+  document.querySelectorAll('.nav-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('sec-' + id).classList.add('active');
+  event.target.classList.add('active');
+}
+
+/* ══════════════════════════════════════════════════════
+   DATA FETCH
+══════════════════════════════════════════════════════ */
+async function fetchData() {
+  const res = await fetch('/api/dashboard');
+  DATA = await res.json();
+  renderAll();
+  document.getElementById('loader').classList.add('hidden');
+  document.getElementById('cache-badge').textContent = 'Data Ready';
+  document.getElementById('cache-badge').style.borderColor = 'var(--green)';
+  document.getElementById('cache-badge').style.color = 'var(--green)';
+}
+
+async function refreshData() {
+  document.getElementById('cache-badge').textContent = 'Refreshing…';
+  document.getElementById('cache-badge').style.borderColor = '';
+  document.getElementById('cache-badge').style.color = '';
+  await fetch('/api/refresh', {method:'POST'});
+  setTimeout(fetchData, 1500);
+}
+
+/* ══════════════════════════════════════════════════════
+   HELPERS
+══════════════════════════════════════════════════════ */
+function mkChart(id, config) {
+  if (CHARTS[id]) CHARTS[id].destroy();
+  const ctx = document.getElementById(id);
+  if (!ctx) return;
+  CHARTS[id] = new Chart(ctx, config);
+}
+const darkGrid = {color:'rgba(28,34,48,.8)'};
+const noLegend = {display:false};
+
+function cardBg(alpha=1) {
+  return `rgba(18,23,32,${alpha})`;
+}
+
+/* ══════════════════════════════════════════════════════
+   RENDER ALL
+══════════════════════════════════════════════════════ */
+function renderAll() {
+  renderKPIs();
+  renderSentPills();
+  renderStatBoxes();
+  renderFiList();
+  renderHeatmap();
+  renderLeaderboard();
+  renderOverviewInsight();
+  renderStatsInsight();
+  renderMlInsight();
+  // charts
+  renderFGChart();
+  renderSentPieChart();
+  renderWinRateChart();
+  renderLevChart();
+  renderSentPnlChart();
+  renderSentVolChart();
+  renderSymSentChart();
+  renderDowChart();
+  renderSentLevChart();
+  renderHistChart();
+  renderFgHistChart();
+  renderRadarChart();
+  renderTsChart();
+  renderDailyVolChart();
+}
+
+/* ══════════════════════════════════════════════════════
+   KPIs
+══════════════════════════════════════════════════════ */
+function renderKPIs() {
+  const k = DATA.kpis;
+  const items = [
+    {label:'Total Trades', value: k.total_trades.toLocaleString(), cls:''},
+    {label:'Unique Traders', value: k.unique_traders, cls:'teal'},
+    {label:'Assets Tracked', value: k.unique_symbols, cls:'blue'},
+    {label:'Profitable Traders', value: k.profitable_pct + '%', cls:'green'},
+    {label:'Total Volume (USD)', value: '$' + (k.total_volume/1e6).toFixed(1)+'M', cls:''},
+    {label:'Avg Leverage', value: k.avg_leverage + 'x', cls:'teal'},
+  ];
+  document.getElementById('kpi-grid').innerHTML = items.map(i => `
+    <div class="kpi-card">
+      <div class="kpi-label">${i.label}</div>
+      <div class="kpi-value ${i.cls}">${i.value}</div>
+    </div>`).join('');
+}
+
+/* ══════════════════════════════════════════════════════
+   SENTIMENT PILLS
+══════════════════════════════════════════════════════ */
+function renderSentPills() {
+  const cls = {'Extreme Fear':'ef','Fear':'fe','Neutral':'ne','Greed':'gr','Extreme Greed':'eg'};
+  const html = DATA.sentiment_perf.map(s => `
+    <div class="sent-pill ${cls[s.classification]}">
+      <div class="sp-name">${s.classification}</div>
+      <div class="sp-pnl">${s.mean_pnl >= 0 ? '+' : ''}$${s.mean_pnl}</div>
+      <div class="sp-wr">Win rate ${s.win_rate}%  ·  ${s.trade_cnt.toLocaleString()} trades</div>
+    </div>`).join('');
+  document.getElementById('sent-pills').innerHTML = html;
+}
+
+/* ══════════════════════════════════════════════════════
+   STAT BOXES
+══════════════════════════════════════════════════════ */
+function renderStatBoxes() {
+  const t = DATA.stats_tests;
+  document.getElementById('stat-boxes').innerHTML = `
+    <div class="stat-box">
+      <div class="test-name">Kruskal-Wallis H-Test  (PnL across 5 sentiments)</div>
+      <div class="test-vals">
+        <div class="tv-item"><div class="tv-label">H-statistic</div><div class="tv-val">${t.kruskal_h}</div></div>
+        <div class="tv-item"><div class="tv-label">p-value</div><div class="tv-val">${t.kruskal_p}</div></div>
+      </div>
+      <div class="test-verdict ${t.kw_significant ? 'sig' : ''}">
+        ${t.kw_significant ? '✓ Statistically significant (p < 0.05)' : '✗ Not significant (p > 0.05) — fail to reject H₀'}
+      </div>
+    </div>
+    <div class="stat-box">
+      <div class="test-name">Spearman Rank Correlation  (FG Index vs PnL)</div>
+      <div class="test-vals">
+        <div class="tv-item"><div class="tv-label">ρ (rho)</div><div class="tv-val">${t.spearman_r}</div></div>
+        <div class="tv-item"><div class="tv-label">p-value</div><div class="tv-val">${t.spearman_p}</div></div>
+      </div>
+      <div class="test-verdict">
+        ${Math.abs(t.spearman_r) < 0.1 ? 'Negligible monotonic relationship' : Math.abs(t.spearman_r) < 0.3 ? 'Weak correlation detected' : 'Moderate correlation detected'}
+      </div>
+    </div>`;
+}
+
+/* ══════════════════════════════════════════════════════
+   FEATURE IMPORTANCE LIST
+══════════════════════════════════════════════════════ */
+function renderFiList() {
+  const fi = DATA.feature_importance;
+  const colors = ['var(--orange)','var(--teal)','var(--blue)','var(--purple)','var(--red)'];
+  document.getElementById('cv-auc').textContent = fi.cv_auc;
+  document.getElementById('fi-list').innerHTML = fi.features.map((f,i) => `
+    <div class="fi-row">
+      <div class="fi-label">${f.name}</div>
+      <div class="fi-bar-wrap">
+        <div class="fi-bar" style="width:${f.importance}%;background:${colors[i]}"></div>
+      </div>
+      <div class="fi-pct">${f.importance}%</div>
+    </div>`).join('');
+}
+
+/* ══════════════════════════════════════════════════════
+   HEATMAP (hour × sentiment)
+══════════════════════════════════════════════════════ */
+function renderHeatmap() {
+  const data = DATA.hour_heatmap;
+  const hours = [...Array(24).keys()];
+  const sents = SENT_ORDER;
+
+  // Build lookup
+  const lookup = {};
+  data.forEach(d => { lookup[`${d.hour}_${d.sentiment}`] = d.mean_pnl; });
+
+  const allVals = data.map(d => d.mean_pnl);
+  const minV = Math.min(...allVals), maxV = Math.max(...allVals);
+
+  function cellColor(v) {
+    if (v === undefined || v === null) return 'var(--faint)';
+    const t = (v - minV) / (maxV - minV);
+    if (t < 0.5) {
+      const r = Math.round(248 + (18-248)*(t*2));
+      const g = Math.round(113 + (23-113)*(t*2));
+      const b = Math.round(113 + (32-113)*(t*2));
+      return `rgb(${r},${g},${b})`;
+    } else {
+      const r = Math.round(18 + (74-18)*((t-0.5)*2));
+      const g = Math.round(23 + (222-23)*((t-0.5)*2));
+      const b = Math.round(32 + (128-32)*((t-0.5)*2));
+      return `rgb(${r},${g},${b})`;
+    }
+  }
+
+  const colW = 80;
+  const totalCols = sents.length + 1;
+
+  let html = `<div class="heatmap" style="grid-template-columns:40px ${sents.map(()=>colW+'px').join(' ')}">`;
+  // header row
+  html += `<div class="hm-cell" style="color:var(--muted)">Hr</div>`;
+  sents.forEach(s => {
+    html += `<div class="hm-cell" style="color:${SENT_COLORS[s]};font-size:.62rem">${s.replace(' ','\n')}</div>`;
+  });
+  hours.forEach(h => {
+    html += `<div class="hm-cell" style="color:var(--muted)">${h.toString().padStart(2,'0')}</div>`;
+    sents.forEach(s => {
+      const v = lookup[`${h}_${s}`];
+      const bg = cellColor(v);
+      const txtColor = v !== undefined ? (Math.abs(v) > (maxV*0.4) ? '#000' : 'var(--text)') : 'var(--muted)';
+      html += `<div class="hm-cell" style="background:${bg};color:${txtColor}" title="${s}, ${h}:00 → ${v !== undefined ? '$'+v : 'N/A'}">${v !== undefined ? v.toFixed(1) : '—'}</div>`;
+    });
+  });
+  html += '</div>';
+  document.getElementById('heatmap-container').innerHTML = html;
+}
+
+/* ══════════════════════════════════════════════════════
+   LEADERBOARD
+══════════════════════════════════════════════════════ */
+function renderLeaderboard() {
+  document.getElementById('lb-body').innerHTML = DATA.trader_leaderboard.map(t => `
+    <tr>
+      <td class="rank ${t.rank<=3?'top3':''}">${t.rank <= 3 ? ['🥇','🥈','🥉'][t.rank-1] : t.rank}</td>
+      <td class="addr">${t.address}</td>
+      <td class="${t.total_pnl>=0?'pnl-pos':'pnl-neg'}">${t.total_pnl>=0?'+':''}$${t.total_pnl.toFixed(2)}</td>
+      <td>${t.win_rate}%</td>
+      <td>${t.trade_count.toLocaleString()}</td>
+      <td>${t.avg_leverage}x</td>
+      <td>${t.symbols}</td>
+    </tr>`).join('');
+}
+
+/* ══════════════════════════════════════════════════════
+   INSIGHTS
+══════════════════════════════════════════════════════ */
+function renderOverviewInsight() {
+  const best = DATA.sentiment_perf.reduce((a,b) => a.mean_pnl>b.mean_pnl?a:b);
+  document.getElementById('overview-insight').innerHTML =
+    `<strong>Key Finding:</strong>  The <strong>${best.classification}</strong> regime produces the highest mean PnL 
+     (<strong>${best.mean_pnl >= 0 ? '+' : ''}$${best.mean_pnl}</strong>) with a win rate of <strong>${best.win_rate}%</strong> 
+     across <strong>${best.trade_cnt.toLocaleString()}</strong> trades — consistent with a contrarian strategy that capitalises 
+     on sentiment-driven mispricings.`;
+}
+
+function renderStatsInsight() {
+  const t = DATA.stats_tests;
+  document.getElementById('stats-insight').innerHTML =
+    `<strong>Interpretation:</strong>  The Kruskal-Wallis test (H=${t.kruskal_h}, p=${t.kruskal_p}) 
+     suggests the PnL distributions across sentiment regimes are <strong>${t.kw_significant ? 'statistically distinguishable' : 'not statistically distinct at α=0.05'}</strong>. 
+     The Spearman correlation (ρ=${t.spearman_r}) confirms a <strong>near-negligible linear relationship</strong> between the raw 
+     Fear/Greed score and individual trade PnL — but directional patterns remain economically meaningful.`;
+}
+
+function renderMlInsight() {
+  const fi = DATA.feature_importance.features;
+  document.getElementById('ml-insight').innerHTML =
+    `<strong>ML Insight:</strong>  <strong>${fi[0].name}</strong> (${fi[0].importance}%) and <strong>${fi[1].name}</strong> (${fi[1].importance}%) 
+     dominate trade-outcome prediction. Crucially, <strong>Fear/Greed Index value</strong> ranks 
+     3rd at <strong>${fi.find(f=>f.name==='value')?.importance || '?'}%</strong> — confirming sentiment as a 
+     meaningful auxiliary signal even when overall AUC (${DATA.feature_importance.cv_auc}) reflects market efficiency.`;
+}
+
+/* ══════════════════════════════════════════════════════
+   CHARTS
+══════════════════════════════════════════════════════ */
+
+function renderFGChart() {
+  const ts = DATA.timeseries.filter((_,i)=>i%3===0);
+  mkChart('chart-fg', {
+    type:'line',
+    data:{
+      labels: ts.map(d=>d.date),
+      datasets:[
+        {label:'FG Value', data:ts.map(d=>d.value), borderColor:'rgba(247,147,26,.4)',
+         fill:true, backgroundColor:'rgba(247,147,26,.06)', tension:.4, pointRadius:0, borderWidth:1},
+        {label:'30d MA', data:ts.map(d=>d.roll30), borderColor:'#f7931a',
+         fill:false, tension:.4, pointRadius:0, borderWidth:2},
+        {label:'7d MA', data:ts.map(d=>d.roll7), borderColor:'#00d4aa',
+         fill:false, tension:.4, pointRadius:0, borderWidth:1.5, borderDash:[3,3]},
+      ]
+    },
+    options:{responsive:true,scales:{
+      x:{grid:darkGrid,ticks:{maxTicksLimit:8}},
+      y:{grid:darkGrid,min:0,max:100,
+         ticks:{callback:v=>v}},
+    },plugins:{legend:{display:true,labels:{color:'#94a3b8',font:{size:10}}}}}
+  });
+}
+
+function renderSentPieChart() {
+  const sp = DATA.sentiment_perf;
+  mkChart('chart-sent-pie', {
+    type:'doughnut',
+    data:{
+      labels: sp.map(s=>s.classification),
+      datasets:[{
+        data: sp.map(s=>s.trade_cnt),
+        backgroundColor: SENT_ORDER.map(s=>SENT_COLORS[s]+'bb'),
+        borderColor: SENT_ORDER.map(s=>SENT_COLORS[s]),
+        borderWidth:1.5, hoverOffset:6,
+      }]
+    },
+    options:{responsive:true,cutout:'60%',
+      plugins:{legend:{position:'right',labels:{color:'#94a3b8',font:{size:10}}}}}
+  });
+}
+
+function renderWinRateChart() {
+  const sp = DATA.sentiment_perf;
+  mkChart('chart-winrate', {
+    type:'bar',
+    data:{
+      labels: sp.map(s=>s.classification),
+      datasets:[{
+        label:'Win Rate %', data:sp.map(s=>s.win_rate),
+        backgroundColor: SENT_ORDER.map(s=>SENT_COLORS[s]+'99'),
+        borderColor: SENT_ORDER.map(s=>SENT_COLORS[s]),
+        borderWidth:1.5, borderRadius:5,
+      }]
+    },
+    options:{responsive:true,scales:{
+      x:{grid:darkGrid},
+      y:{grid:darkGrid,min:0,max:60,ticks:{callback:v=>v+'%'}},
+    },plugins:{legend:noLegend,
+      annotation:{annotations:{line50:{type:'line',yMin:50,yMax:50,
+        borderColor:'rgba(100,116,139,.5)',borderWidth:1,borderDash:[4,4]}}}
+    }}
+  });
+}
+
+function renderLevChart() {
+  const lv = DATA.leverage_winrate;
+  mkChart('chart-lev', {
+    type:'bar',
+    data:{
+      labels: lv.map(l=>l.bucket),
+      datasets:[{
+        label:'Win Rate %', data:lv.map(l=>l.win_rate),
+        backgroundColor:['#f7931a99','#00d4aa99','#38bdf899','#c084fc99','#f8717199'],
+        borderColor:['#f7931a','#00d4aa','#38bdf8','#c084fc','#f87171'],
+        borderWidth:1.5, borderRadius:5,
+      }]
+    },
+    options:{responsive:true,scales:{
+      x:{grid:darkGrid},y:{grid:darkGrid,min:0,max:65,ticks:{callback:v=>v+'%'}},
+    },plugins:{legend:noLegend}}
+  });
+}
+
+function renderSentPnlChart() {
+  const sp = DATA.sentiment_perf;
+  mkChart('chart-sent-pnl', {
+    type:'bar',
+    data:{
+      labels: sp.map(s=>s.classification),
+      datasets:[{
+        data:sp.map(s=>s.mean_pnl),
+        backgroundColor: sp.map(s=>s.mean_pnl>=0?'rgba(74,222,128,.25)':'rgba(248,113,113,.25)'),
+        borderColor: sp.map(s=>s.mean_pnl>=0?'#4ade80':'#f87171'),
+        borderWidth:1.5, borderRadius:5,
+      }]
+    },
+    options:{responsive:true,scales:{
+      x:{grid:darkGrid},y:{grid:darkGrid,ticks:{callback:v=>'$'+v}},
+    },plugins:{legend:noLegend}}
+  });
+}
+
+function renderSentVolChart() {
+  const sp = DATA.sentiment_perf;
+  mkChart('chart-sent-vol', {
+    type:'bar',
+    data:{
+      labels: sp.map(s=>s.classification),
+      datasets:[{
+        data:sp.map(s=>s.trade_cnt),
+        backgroundColor: SENT_ORDER.map(s=>SENT_COLORS[s]+'55'),
+        borderColor: SENT_ORDER.map(s=>SENT_COLORS[s]),
+        borderWidth:1.5, borderRadius:5,
+      }]
+    },
+    options:{responsive:true,scales:{x:{grid:darkGrid},y:{grid:darkGrid}},plugins:{legend:noLegend}}
+  });
+}
+
+function renderSymSentChart() {
+  const raw = DATA.symbol_breakdown;
+  const syms = [...new Set(raw.map(d=>d.symbol))];
+  const datasets = SENT_ORDER.map(s => ({
+    label:s,
+    data: syms.map(sym => {
+      const r = raw.find(d=>d.symbol===sym&&d.classification===s);
+      return r ? r.mean_pnl : 0;
+    }),
+    backgroundColor: SENT_COLORS[s]+'88',
+    borderColor: SENT_COLORS[s],
+    borderWidth:1.5, borderRadius:3,
+  }));
+  mkChart('chart-sym-sent', {
+    type:'bar',
+    data:{labels:syms, datasets},
+    options:{responsive:true,scales:{
+      x:{grid:darkGrid},y:{grid:darkGrid,ticks:{callback:v=>'$'+v}},
+    },plugins:{legend:{labels:{color:'#94a3b8',font:{size:10}}}}}
+  });
+}
+
+function renderDowChart() {
+  const dow = DATA.dow_pnl;
+  mkChart('chart-dow', {
+    type:'bar',
+    data:{
+      labels: dow.map(d=>d.day.slice(0,3)),
+      datasets:[{
+        data:dow.map(d=>d.mean_pnl),
+        backgroundColor: dow.map(d=>d.mean_pnl>=0?'rgba(74,222,128,.25)':'rgba(248,113,113,.25)'),
+        borderColor: dow.map(d=>d.mean_pnl>=0?'#4ade80':'#f87171'),
+        borderWidth:1.5, borderRadius:5,
+      }]
+    },
+    options:{responsive:true,scales:{x:{grid:darkGrid},y:{grid:darkGrid,ticks:{callback:v=>'$'+v}}},plugins:{legend:noLegend}}
+  });
+}
+
+function renderSentLevChart() {
+  const sp = DATA.sentiment_perf;
+  mkChart('chart-sent-lev', {
+    type:'bar',
+    data:{
+      labels: sp.map(s=>s.classification),
+      datasets:[{
+        data:sp.map(s=>s.avg_lev),
+        backgroundColor: SENT_ORDER.map(s=>SENT_COLORS[s]+'66'),
+        borderColor: SENT_ORDER.map(s=>SENT_COLORS[s]),
+        borderWidth:1.5, borderRadius:5,
+      }]
+    },
+    options:{responsive:true,scales:{x:{grid:darkGrid},y:{grid:darkGrid,ticks:{callback:v=>v+'x'}}},plugins:{legend:noLegend}}
+  });
+}
+
+function renderHistChart() {
+  const dist = DATA.pnl_distribution;
+  const ef = (dist['Extreme Fear']||[]).filter(v=>v>=-200&&v<=200);
+  const eg = (dist['Extreme Greed']||[]).filter(v=>v>=-200&&v<=200);
+
+  function histogram(vals, bins=30, min=-200, max=200) {
+    const w = (max-min)/bins;
+    const counts = new Array(bins).fill(0);
+    vals.forEach(v=>{ const i = Math.min(bins-1, Math.floor((v-min)/w)); if(i>=0) counts[i]++; });
+    return {labels: [...Array(bins)].map((_,i)=>(min+i*w).toFixed(0)), counts};
+  }
+
+  const hef = histogram(ef); const heg = histogram(eg);
+  mkChart('chart-hist', {
+    type:'bar',
+    data:{
+      labels: hef.labels,
+      datasets:[
+        {label:'Extreme Fear', data:hef.counts, backgroundColor:'rgba(248,113,113,.35)',
+         borderColor:'#f87171', borderWidth:1},
+        {label:'Extreme Greed', data:heg.counts, backgroundColor:'rgba(52,211,153,.25)',
+         borderColor:'#34d399', borderWidth:1},
+      ]
+    },
+    options:{responsive:true,
+      scales:{x:{grid:darkGrid,ticks:{maxTicksLimit:8,callback:v=>'$'+v}},y:{grid:darkGrid}},
+      plugins:{legend:{labels:{color:'#94a3b8',font:{size:10}}}}}
+  });
+}
+
+function renderFgHistChart() {
+  const ts = DATA.timeseries;
+  const vals = ts.map(d=>d.value);
+  function histogram(vals, bins=20, min=0, max=100) {
+    const w = (max-min)/bins;
+    const counts = new Array(bins).fill(0);
+    const labels = [];
+    for(let i=0;i<bins;i++) labels.push((min+i*w).toFixed(0));
+    vals.forEach(v=>{ const i=Math.min(bins-1,Math.floor((v-min)/w)); if(i>=0) counts[i]++; });
+    return {labels,counts};
+  }
+  const h = histogram(vals);
+  mkChart('chart-fg-hist', {
+    type:'bar',
+    data:{labels:h.labels, datasets:[{
+      data:h.counts,
+      backgroundColor: h.labels.map(v=>{
+        const n=Number(v);
+        if(n<=24) return 'rgba(248,113,113,.5)';
+        if(n<=44) return 'rgba(251,146,60,.5)';
+        if(n<=55) return 'rgba(250,204,21,.5)';
+        if(n<=74) return 'rgba(74,222,128,.5)';
+        return 'rgba(52,211,153,.5)';
+      }),
+      borderWidth:0, borderRadius:3,
+    }]},
+    options:{responsive:true,
+      scales:{x:{grid:darkGrid,ticks:{maxTicksLimit:10}},y:{grid:darkGrid}},
+      plugins:{legend:noLegend}}
+  });
+}
+
+function renderRadarChart() {
+  const fi = DATA.feature_importance.features;
+  mkChart('chart-radar', {
+    type:'radar',
+    data:{
+      labels: fi.map(f=>f.name),
+      datasets:[{
+        label:'Importance %', data:fi.map(f=>f.importance),
+        backgroundColor:'rgba(247,147,26,.15)',
+        borderColor:'#f7931a', pointBackgroundColor:'#f7931a',
+        borderWidth:2, pointRadius:4,
+      }]
+    },
+    options:{responsive:true,
+      scales:{r:{grid:{color:'rgba(28,34,48,.8)'},
+               pointLabels:{color:'#94a3b8',font:{size:11}},
+               ticks:{display:false},angleLines:{color:'rgba(28,34,48,.8)'}}},
+      plugins:{legend:noLegend}}
+  });
+}
+
+function renderTsChart() {
+  const ts = DATA.timeseries.filter((_,i)=>i%2===0);
+  mkChart('chart-ts', {
+    type:'line',
+    data:{
+      labels: ts.map(d=>d.date),
+      datasets:[{
+        label:'FG Value', data:ts.map(d=>d.value),
+        segment:{
+          borderColor: ctx=>{
+            const v = ctx.p1.parsed.y;
+            if(v<=24) return '#f87171'; if(v<=44) return '#fb923c';
+            if(v<=55) return '#facc15'; if(v<=74) return '#4ade80';
+            return '#34d399';
+          }
+        },
+        fill:false, tension:.3, pointRadius:0, borderWidth:2,
+      }]
+    },
+    options:{responsive:true,scales:{
+      x:{grid:darkGrid,ticks:{maxTicksLimit:10}},
+      y:{grid:darkGrid,min:0,max:100},
+    },plugins:{legend:noLegend}}
+  });
+}
+
+function renderDailyVolChart() {
+  const dv = DATA.daily_volume;
+  const dates = [...new Set(dv.map(d=>d.date))].sort().filter((_,i)=>i%4===0);
+  const datasets = SENT_ORDER.map(s => ({
+    label:s,
+    data: dates.map(dt => {
+      const r = dv.find(d=>d.date===dt&&d.classification===s);
+      return r ? r.count : 0;
+    }),
+    backgroundColor: SENT_COLORS[s]+'77',
+    borderColor: SENT_COLORS[s],
+    borderWidth:1, stack:'vol',
+  }));
+  mkChart('chart-daily-vol', {
+    type:'bar',
+    data:{labels:dates, datasets},
+    options:{responsive:true,scales:{
+      x:{grid:darkGrid,ticks:{maxTicksLimit:10},stacked:true},
+      y:{grid:darkGrid,stacked:true},
+    },plugins:{legend:{labels:{color:'#94a3b8',font:{size:10}}}}}
+  });
+}
+
+/* ══════════════════════════════════════════════════════
+   BOOT
+══════════════════════════════════════════════════════ */
+window.addEventListener('DOMContentLoaded', fetchData);
+</script>
+</body>
+</html>

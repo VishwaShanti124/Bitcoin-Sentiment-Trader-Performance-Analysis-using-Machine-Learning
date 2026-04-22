@@ -1,0 +1,40 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Run Full Pipeline",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": []
+    },
+    {
+      "name": "Run Pipeline (skip data gen)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "console": "integratedTerminal",
+      "justMyCode": true,
+      "args": ["--skip-data"]
+    },
+    {
+      "name": "Generate Data Only",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/data/generate_data.py",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "Run Tests",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "pytest",
+      "args": ["tests/", "-v"],
+      "console": "integratedTerminal",
+      "justMyCode": false
+    }
+  ]
+}
